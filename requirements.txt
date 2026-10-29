@@ -1,0 +1,20 @@
+# ==============================================================================
+# Dependências do Projeto: Classificador PMC de Sorotipos da Dengue
+# ==============================================================================
+
+# Computação Científica e Estruturas de Dados
+numpy>=1.25.0
+pandas>=2.0.0
+
+# Aprendizado de Máquina e Perceptron Multicamadas (PMC)
+scikit-learn>=1.4.0
+joblib>=1.3.0
+
+# Visualização de Dados e Gráficos Acadêmicos
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Interface Web Interativa (Dashboard)
+streamlit>=1.35.0
+altair>=5.0.0
+

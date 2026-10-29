@@ -1,0 +1,45 @@
+# ==============================================================================
+# .gitignore - Classificador de Sorotipos do Vírus da Dengue (PMC)
+# ==============================================================================
+
+# Byte-compiled / otimizados / cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Ambientes Virtuais (Virtual Environments)
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Arquivos de IDEs e Editores de Código
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# Arquivos do Sistema Operacional
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs e Processos em Background
+*.log
+*.pid
+
+# Relatórios temporários e dinâmicos de predição gerados pela CLI
+predicoes_*.csv
+
+# (Opcional) Descomente as linhas abaixo caso não deseje versionar 
+# os modelos treinados pesados ou arquivos de dados brutos muito volumosos:
+# *.joblib
+# *.fasta
+
