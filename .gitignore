@@ -37,6 +37,7 @@ Desktop.ini
 
 # Relatórios temporários e dinâmicos de predição gerados pela CLI
 predicoes_*.csv
+resultados/predicoes/predicoes_*.csv
 
 # (Opcional) Descomente as linhas abaixo caso não deseje versionar 
 # os modelos treinados pesados ou arquivos de dados brutos muito volumosos:

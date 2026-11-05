@@ -1,35 +1,55 @@
 """
 ================================================================================
 INTERFACE STREAMLIT: CLASSIFICADOR PMC DE SOROTIPOS DO VÍRUS DA DENGUE
+Abordagem por Fragmentos Genômicos Curtos (Simulação NGS / Contigs)
 Trabalho Acadêmico de Graduação em Inteligência Artificial / Bioinformática
 ================================================================================
 """
 
 import datetime
-import io
+import importlib
 import os
+import sys
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
 
+# Garante que o diretório raiz esteja no sys.path e recarrega o módulo PMC caso o servidor
+# Streamlit já estivesse em execução antes da reorganização das subpastas (hot-reload seguro)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+import PMC as _pmc_mod
+if not hasattr(_pmc_mod, "CAMINHO_PIPELINE_PADRAO"):
+    _pmc_mod = importlib.reload(_pmc_mod)
+
 # Importa o pipeline e funções de suporte do módulo PMC principal
 from PMC import (
-    TRIMEROS_64,
+    CAMINHO_PIPELINE_PADRAO,
+    DIR_GRAFICOS,
+    DIR_MODELOS,
+    DIR_RESULTADOS,
+    K_MER_SIZE,
+    NUM_KMERS,
+    LeanMLPDropout,
+    aplicar_ruido_estocastico,
     carregar_pipeline,
-    extrair_frequencias_trimeros,
+    extrair_frequencias_kmers,
+    mapear_regioes_genomicas,
     validar_sequencia,
 )
 
 # Configuração da Página
 st.set_page_config(
-    page_title="Classificador PMC - Sorotipos DENV",
+    page_title="Classificador PMC - Fragmentos DENV",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-HISTORICO_CSV = "historico_predicoes.csv"
+HISTORICO_CSV = os.path.join(DIR_RESULTADOS, "historico_predicoes.csv")
 CORES_SOROTIPOS = {
     "DENV-1": "#1f77b4",  # Azul
     "DENV-2": "#2ca02c",  # Verde
@@ -59,8 +79,7 @@ def carregar_historico():
     ]
     if os.path.exists(HISTORICO_CSV):
         try:
-            df = pd.read_csv(HISTORICO_CSV)
-            return df
+            return pd.read_csv(HISTORICO_CSV)
         except Exception:
             return pd.DataFrame(columns=colunas)
     return pd.DataFrame(columns=colunas)
@@ -70,6 +89,7 @@ def salvar_no_historico(novos_registros):
     """Adiciona novas predições ao arquivo de histórico persistente."""
     if not novos_registros:
         return
+    os.makedirs(os.path.dirname(HISTORICO_CSV), exist_ok=True)
     df_novo = pd.DataFrame(novos_registros)
     if os.path.exists(HISTORICO_CSV):
         df_novo.to_csv(HISTORICO_CSV, mode="a", header=False, index=False)
@@ -123,13 +143,21 @@ def processar_texto_fasta(texto):
 
 
 @st.cache_resource(show_spinner="Carregando modelo PMC e normalizador...")
-def obter_pipeline():
-    """Carrega o pipeline serializado uma única vez em cache."""
-    return carregar_pipeline()
+def obter_pipeline(caminho_modelo: str = CAMINHO_PIPELINE_PADRAO):
+    """Carrega o pipeline serializado uma única vez em cache a partir de modelos/."""
+    return carregar_pipeline(caminho_modelo)
 
 
-pipeline = obter_pipeline()
-classes_modelo = list(pipeline.named_steps["pmc"].classes_)
+try:
+    pipeline = obter_pipeline(CAMINHO_PIPELINE_PADRAO)
+    classes_modelo = list(pipeline.named_steps["pmc"].classes_)
+except FileNotFoundError as erro_modelo:
+    st.error(
+        f"⚠️ **Modelo treinado não encontrado:** `{erro_modelo}`\n\n"
+        f"Certifique-se de que o arquivo exista em `{CAMINHO_PIPELINE_PADRAO}` "
+        f"ou execute `python PMC.py` na raiz do projeto para treiná-lo."
+    )
+    st.stop()
 
 
 # ==============================================================================
@@ -141,20 +169,23 @@ with st.sidebar:
         "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Dengue_virus_cryo-EM.png/320px-Dengue_virus_cryo-EM.png",
         caption="Estrutura do Vírus da Dengue (Flaviviridae)",
     )
-    st.title("PMC - Classificador DENV")
-    st.markdown("""
-    **Trabalho Acadêmico de Graduação**
-    * **Rede:** Perceptron Multicamadas (PMC)
-    * **Entrada:** 64 Trímeros Canônicos ($k=3$)
+    st.title("PMC - Fragmentos DENV")
+    st.markdown(f"""
+    **Trabalho Acadêmico de Graduação (Versão 3.0)**
+    * **Rede:** Perceptron Multicamadas Enxuto (`LeanMLPDropout`)
+    * **Arquitetura:** `(32,)` neurônios ocultos
+    * **Regularização:** Inverted Dropout ($p=0.3$) + $L_2$ ($\alpha=0.01$)
+    * **Entrada:** {NUM_KMERS:,} K-mers canônicos ($K={K_MER_SIZE}$)
+    * **Resolução:** Fragmentos curtos / Reads brutas NGS / Amplicons
     * **Classes:** DENV-1, DENV-2, DENV-3, DENV-4
     """)
     st.divider()
 
-    st.subheader("⚙️ Critérios de Qualidade")
+    st.subheader("⚙️ Robustez Metodológica")
     st.markdown("""
-    * **Tamanho do genoma:** $10.000$ a $11.500\\text{ pb}$
-    * **Bases ambíguas (N):** Máximo de $1,0\\%$
-    * **Normalização:** Z-score (`StandardScaler`)
+    * **Zero Data Leakage:** Partição estrita ao nível de genomas completos antes do fatiamento.
+    * **Resiliência a Ruído:** Testado contra mutações e indels aleatórios de basecalling.
+    * **Normalização:** Z-score (`StandardScaler`) integrado no Pipeline.
     """)
 
 
@@ -162,13 +193,13 @@ with st.sidebar:
 # CORPO PRINCIPAL E ABAS
 # ==============================================================================
 
-st.title("🧬 Classificação dos Sorotipos da Dengue via PMC")
-st.markdown("Sistema inteligente para diagnóstico genômico e rastreamento de sorotipos virais via assinaturas de trímeros.")
+st.title("🧬 Classificação de Fragmentos Genômicos da Dengue via PMC")
+st.markdown("Sistema inteligente para diagnóstico genômico e tipagem de contigs e leituras parciais via assinaturas de 6-mers canônicos (4.096 características).")
 
 tab_classificar, tab_dataset, tab_modelo = st.tabs([
-    "🔍 Classificar Nova Amostra",
+    "🔍 Classificar Nova Amostra / Fragmento",
     "📊 Conjunto de Dados & Histórico",
-    "🧠 Arquitetura & Diagnóstico do PMC",
+    "🧠 Arquitetura, Diagnóstico & Auditoria Biológica",
 ])
 
 
@@ -176,7 +207,7 @@ tab_classificar, tab_dataset, tab_modelo = st.tabs([
 # ABA 1: CLASSIFICAÇÃO DE NOVAS AMOSTRAS
 # ------------------------------------------------------------------------------
 with tab_classificar:
-    st.subheader("1. Carregar Arquivo FASTA ou Colar Sequência")
+    st.subheader("1. Carregar Arquivo FASTA ou Colar Fragmento/Genoma")
     
     tipo_entrada = st.radio(
         "Formato de Entrada:",
@@ -189,9 +220,9 @@ with tab_classificar:
 
     if "Upload" in tipo_entrada:
         arquivo_upload = st.file_uploader(
-            "Selecione um arquivo FASTA de genoma completo:",
+            "Selecione um arquivo FASTA contendo fragmentos ou genomas completos:",
             type=["fasta", "fa", "txt", "fna"],
-            help="Genomas completos (~10.500 pb) no formato FASTA padrão.",
+            help="Fragmentos curtos, contigs ou genomas completos no formato FASTA padrão.",
         )
         if arquivo_upload is not None:
             nome_origem = arquivo_upload.name
@@ -202,13 +233,19 @@ with tab_classificar:
         texto_seq = st.text_area(
             "Cole o conteúdo FASTA completo (incluindo o cabeçalho >):",
             height=200,
-            placeholder=">Amostra_01 Exemplo\nAGTTGTTAGTCTACGTGGACCGACAAGAACAGTTTCGAATCGGAAGCTTG...",
+            placeholder=">Fragmento_01 Contig_NS5\nGGCCAGTTCGGAAGCTTGCTTAACACAGTTCTAACAGTTTGTTTGAATAGAGAGCAGATC...",
         )
         if texto_seq.strip():
             amostras_para_analise = processar_texto_fasta(texto_seq)
 
+    simular_ruido_ngs = st.checkbox(
+        "🧪 Simular Leituras Brutas de Sequenciamento NGS (Injetar 4% de ruído estocástico: mutações pontuais e indels)",
+        value=False,
+        help="Simula sequenciamento de leituras brutas (Oxford Nanopore / Illumina sem polimento de basecalling) para auditar a resiliência do modelo.",
+    )
+
     # Botão de Execução
-    if st.button("🚀 Executar Classificação pelo PMC", type="primary", use_container_width=True):
+    if st.button("🚀 Executar Classificação pelo PMC", type="primary", width="stretch"):
         if not amostras_para_analise:
             st.warning("Por favor, carregue um arquivo FASTA ou insira uma sequência para continuar.")
         else:
@@ -216,19 +253,22 @@ with tab_classificar:
             resultados_exibicao = []
             timestamp_agora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            with st.spinner("Extraindo trímeros e processando inferência pela rede neural..."):
+            with st.spinner(f"Extraindo {NUM_KMERS:,} K-mers e processando inferência pela rede neural..."):
                 for amostra in amostras_para_analise:
                     id_seq = amostra["id"]
                     seq_str = amostra["seq"]
+
+                    if simular_ruido_ngs:
+                        seq_str = aplicar_ruido_estocastico(seq_str, taxa_erro=0.04)
+
                     comp_pb = len(seq_str)
 
-                    valida, motivo = validar_sequencia(seq_str)
-                    if not valida:
-                        st.error(f"❌ **[{id_seq}] Rejeitada:** {motivo} (Tamanho lido: {comp_pb} pb)")
+                    if comp_pb < K_MER_SIZE:
+                        st.error(f"❌ **[{id_seq}] Rejeitada:** Sequência muito curta ({comp_pb} pb < {K_MER_SIZE} pb).")
                         continue
 
-                    # Extração dos 64 trímeros canônicos
-                    vetor_features = np.array([extrair_frequencias_trimeros(seq_str)])
+                    # Extração dos 4.096 K-mers canônicos (K=6)
+                    vetor_features = extrair_frequencias_kmers(seq_str, K_MER_SIZE).reshape(1, -1)
                     pred = pipeline.predict(vetor_features)[0]
                     probas = pipeline.predict_proba(vetor_features)[0]
 
@@ -253,7 +293,7 @@ with tab_classificar:
             # Persistência no histórico local
             if novos_registros_historico:
                 salvar_no_historico(novos_registros_historico)
-                st.success(f"✅ {len(novos_registros_historico)} sequência(s) classificada(s) e registradas no banco de dados!")
+                st.success(f"✅ {len(novos_registros_historico)} amostra(s) classificada(s) e registradas no banco de dados!")
 
                 # Se for apenas 1 sequência, mostra visualização em destaque
                 if len(resultados_exibicao) == 1:
@@ -292,13 +332,13 @@ with tab_classificar:
                         )
                         .properties(height=260)
                     )
-                    st.altair_chart(chart, use_container_width=True)
+                    st.altair_chart(chart, width="stretch")
 
                 # Se forem múltiplas sequências, mostra em tabela interativa
                 else:
                     st.markdown("### Tabela de Classificação das Amostras:")
                     df_res = pd.DataFrame(resultados_exibicao)
-                    st.dataframe(df_res, use_container_width=True)
+                    st.dataframe(df_res, width="stretch")
 
 
 # ------------------------------------------------------------------------------
@@ -306,7 +346,7 @@ with tab_classificar:
 # ------------------------------------------------------------------------------
 with tab_dataset:
     st.subheader("📈 Painel do Conjunto de Dados Acumulado")
-    st.markdown("Monitoramento de todas as amostras submetidas e classificadas pelo modelo até o momento.")
+    st.markdown("Monitoramento de todas as amostras/fragmentos submetidos e classificados pelo modelo até o momento.")
 
     df_hist = carregar_historico()
 
@@ -354,7 +394,7 @@ with tab_dataset:
                 )
                 .properties(height=300)
             )
-            st.altair_chart(chart_hist, use_container_width=True)
+            st.altair_chart(chart_hist, width="stretch")
 
         with col_info:
             st.markdown("#### Resumo Estatístico:")
@@ -371,11 +411,11 @@ with tab_dataset:
                 data=csv_data,
                 file_name="historico_amostras_denv.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
 
         st.markdown("### Registro Detalhado das Amostras:")
-        st.dataframe(df_hist, use_container_width=True)
+        st.dataframe(df_hist, width="stretch")
 
         # Opção de resetar histórico com confirmação
         with st.expander("⚠️ Opções de Manutenção do Banco de Dados"):
@@ -386,24 +426,91 @@ with tab_dataset:
 
 
 # ------------------------------------------------------------------------------
-# ABA 3: INFORMAÇÕES DO MODELO PMC & GRÁFICOS CIENTÍFICOS
+# ABA 3: INFORMAÇÕES DO MODELO PMC & AUDITORIA BIOLÓGICA
 # ------------------------------------------------------------------------------
 with tab_modelo:
-    st.subheader("🧠 Metodologia e Desempenho do Perceptron Multicamadas (PMC)")
+    st.subheader("🧠 Metodologia, Evolução das Versões e Auditoria Biológica")
     st.markdown("""
-    Este modelo foi treinado em um conjunto curado de mais de **3.100 genomas independentes**
-    do NCBI GenBank e BV-BRC, avaliado em validação cruzada estratificada e teste cego ($100\\%$ de acurácia).
+    O classificador opera com a **Versão 3.0 (Definitiva)** do projeto: modelo **PMC Enxuto (`LeanMLPDropout`)**
+    com **4.096 hexâmeros canônicos ($K=6$)**, camada oculta única de **32 neurônios**, **Inverted Dropout ($p=0.3$)**
+    e **regularização $L_2$ ($\alpha=0.01$)** em NumPy puro (sem dependência de PyTorch).
     """)
+
+    st.markdown("### 📜 Histórico Evolutivo do Projeto e Comparativo de Versões")
+
+    df_versoes = pd.DataFrame([
+        {
+            "Versão": "V1.0 (Legado)",
+            "Alvo": "Genomas Completos (~10.700 pb)",
+            "Features": "64 Trímeros (K=3)",
+            "Arquitetura": "PMC (64, 32)",
+            "Acurácia Global": "99,9%",
+            "Diagnóstico Metodológico": "Separação linearmente trivial. PMC injustificado (overengineering)."
+        },
+        {
+            "Versão": "V2.0",
+            "Alvo": "Fragmentos (2.000 pb)",
+            "Features": "1.024 Pentâmeros (K=5)",
+            "Arquitetura": "PMC (256, 128)",
+            "Acurácia Global": "96,15%",
+            "Diagnóstico Metodológico": "Zero Data Leakage a nível de genoma. Queda em reads curtas (<300 pb: 69,1%)."
+        },
+        {
+            "Versão": "V2.5",
+            "Alvo": "Fragmentos (2.000 pb) e Reads",
+            "Features": "4.096 Hexâmeros (K=6)",
+            "Arquitetura": "PMC Piramidal (512, 128)",
+            "Acurácia Global": "97,51%",
+            "Diagnóstico Metodológico": "Alta especificidade alélica. Modelo pesado (2,16M pesos) e sensível a ruído NGS."
+        },
+        {
+            "Versão": "V3.0 (Definitiva)",
+            "Alvo": "Fragmentos, Amplicons e Reads NGS",
+            "Features": "4.096 Hexâmeros (K=6)",
+            "Arquitetura": "PMC Enxuto (32,) + Dropout (p=0.3) + L2",
+            "Acurácia Global": "97,56% (Limpo) | 97,40% (Ruído NGS)",
+            "Diagnóstico Metodológico": "Apenas 131.200 pesos (redução de 94%). Supera a Regressão Logística sob ruído de basecalling."
+        },
+    ])
+    st.dataframe(df_versoes, width="stretch", hide_index=True)
+
+    st.markdown("### 🔬 Duelo Experimental: PMC Enxuto vs Regressão Logística (Cenários Limpo e Ruidoso)")
+    st.markdown("""
+    Sob simulação de **leitura bruta de sequenciamento NGS com 4% de erro estocástico (substituições e indels)**,
+    o modelo linear aditivo sofre degradação acentuada (-5,83%), enquanto o **PMC com Dropout e regularização L2
+    permanece resiliente e supera a Regressão Logística em amplicons (90,98% vs 85,66%)**:
+    """)
+
+    df_comp_ruido = pd.DataFrame([
+        {"Modelo": "PMC (32,) + Dropout (p=0.3) + L2", "Limpo (Global)": "97,56%", "Limpo (300-1000pb)": "91,80%", "Ruído 4% (Global)": "97,40%", "Ruído 4% (300-1000pb)": "90,98%", "Queda em Reads (<300pb)": "-0,97% (Resiliente)"},
+        {"Modelo": "PMC (64, 16) + Dropout (p=0.3) + L2", "Limpo (Global)": "97,45%", "Limpo (300-1000pb)": "91,39%", "Ruído 4% (Global)": "97,13%", "Ruído 4% (300-1000pb)": "90,57%", "Queda em Reads (<300pb)": "-3,88%"},
+        {"Modelo": "Regressão Logística (L2)", "Limpo (Global)": "97,51%", "Limpo (300-1000pb)": "89,34%", "Ruído 4% (Global)": "96,70%", "Ruído 4% (300-1000pb)": "85,66%", "Queda em Reads (<300pb)": "-5,83% (Sensível)"},
+        {"Modelo": "PMC Grande (512, 128) [V2.5]", "Limpo (Global)": "97,51%", "Limpo (300-1000pb)": "91,39%", "Ruído 4% (Global)": "97,02%", "Ruído 4% (300-1000pb)": "89,34%", "Queda em Reads (<300pb)": "-3,88%"},
+    ])
+    st.dataframe(df_comp_ruido, width="stretch", hide_index=True)
+
+    st.divider()
+
+    caminho_matriz = os.path.join(DIR_GRAFICOS, "matriz_confusao_fragmentos.png")
+    caminho_auditoria = os.path.join(DIR_RESULTADOS, "auditoria_erros_fragmentos.csv")
 
     col_img1, col_img2 = st.columns(2)
     with col_img1:
-        if os.path.exists("matriz_confusao_final.png"):
-            st.image("matriz_confusao_final.png", caption="Matriz de Confusão no Teste Cego (Absoluta e Normalizada)")
-        if os.path.exists("curva_perda.png"):
-            st.image("curva_perda.png", caption="Convergência da Função de Perda (Loss)")
+        if os.path.exists(caminho_matriz):
+            st.image(caminho_matriz, caption="Matriz de Confusão em Fragmentos Curtos de 2.000 pb (V3.0)")
 
     with col_img2:
-        if os.path.exists("importancia_trimeros.png"):
-            st.image("importancia_trimeros.png", caption="Importância das Características (Permutation Importance)")
-        if os.path.exists("distribuicao_confianca.png"):
-            st.image("distribuicao_confianca.png", caption="Distribuição de Calibração das Probabilidades")
+        st.markdown("#### 🧬 Auditoria Biológica de Incerteza e Erros:")
+        st.markdown("""
+        Fragmentos de sequenciamento que apresentaram menor confiança ou divergência de predição
+        foram mapeados contra as coordenadas canônicas da poliproteína viral:
+        * **Região mais crítica:** **NS5 (RNA Polimerase dependente de RNA / Metiltransferase)**
+          (Posições 7.638 - 10.340 pb).
+        * **Fundamentação Biológica:** A enzima NS5 é o gene mais conservado evolutivamente entre todos os Flavivírus,
+          o que diminui a distância de K-mers entre os sorotipos nessa região específica do genoma.
+        """)
+
+    if os.path.exists(caminho_auditoria):
+        st.markdown("#### Tabela de Fragmentos com Incerteza (<85%) ou Erro no Teste Cego:")
+        df_audit = pd.read_csv(caminho_auditoria)
+        st.dataframe(df_audit, width="stretch")
