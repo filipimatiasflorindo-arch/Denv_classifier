@@ -29,16 +29,12 @@ if not hasattr(_pmc_mod, "CAMINHO_PIPELINE_PADRAO"):
 from PMC import (
     CAMINHO_PIPELINE_PADRAO,
     DIR_GRAFICOS,
-    DIR_MODELOS,
     DIR_RESULTADOS,
     K_MER_SIZE,
     NUM_KMERS,
-    LeanMLPDropout,
     aplicar_ruido_estocastico,
     carregar_pipeline,
     extrair_frequencias_kmers,
-    mapear_regioes_genomicas,
-    validar_sequencia,
 )
 
 # Configuração da Página
@@ -103,7 +99,7 @@ def salvar_no_historico(novos_registros):
 
 
 def processar_texto_fasta(texto):
-    """Lê o conteúdo textual de um FASTA e extrai cabeçalhos e sequências."""
+    """Lê o conteúdo textual de um FASTA (ou sequência bruta sem cabeçalho) e extrai sequências."""
     linhas = texto.splitlines()
     sequencias = []
     seq_atual = []
@@ -116,21 +112,26 @@ def processar_texto_fasta(texto):
             continue
         if linha.startswith(">"):
             if seq_atual:
+                id_final = header_atual or f"Sequencia_Manual_{len(sequencias) + 1:02d}"
+                desc_final = header_completo or id_final
                 sequencias.append({
-                    "id": header_atual,
-                    "descricao": header_completo,
+                    "id": id_final,
+                    "descricao": desc_final,
                     "seq": "".join(seq_atual),
                 })
                 seq_atual = []
-            header_completo = linha[1:].strip()
-            header_atual = header_completo.split()[0]
+            header_completo = linha[1:].strip() or f"Sequencia_Manual_{len(sequencias) + 1:02d}"
+            partes = header_completo.split()
+            header_atual = partes[0] if partes else header_completo
         else:
             seq_atual.append(linha)
 
     if seq_atual:
+        id_final = header_atual or f"Sequencia_Manual_{len(sequencias) + 1:02d}"
+        desc_final = header_completo or id_final
         sequencias.append({
-            "id": header_atual,
-            "descricao": header_completo,
+            "id": id_final,
+            "descricao": desc_final,
             "seq": "".join(seq_atual),
         })
 
@@ -469,7 +470,7 @@ with tab_modelo:
             "Features": "4.096 Hexâmeros (K=6)",
             "Arquitetura": "PMC Enxuto (32,) + Dropout (p=0.3) + L2",
             "Acurácia Global": "97,56% (Limpo) | 97,40% (Ruído NGS)",
-            "Diagnóstico Metodológico": "Apenas 131.200 pesos (redução de 94%). Supera a Regressão Logística sob ruído de basecalling."
+            "Diagnóstico Metodológico": "131.200 pesos sinápticos (131.236 parâmetros com vieses, -94%). Supera a Regressão Logística sob ruído NGS."
         },
     ])
     st.dataframe(df_versoes, width="stretch", hide_index=True)
@@ -488,6 +489,25 @@ with tab_modelo:
         {"Modelo": "PMC Grande (512, 128) [V2.5]", "Limpo (Global)": "97,51%", "Limpo (300-1000pb)": "91,39%", "Ruído 4% (Global)": "97,02%", "Ruído 4% (300-1000pb)": "89,34%", "Queda em Reads (<300pb)": "-3,88%"},
     ])
     st.dataframe(df_comp_ruido, width="stretch", hide_index=True)
+
+    with st.expander("📊 Novos Experimentos do Artigo (Ablação K=4..6, Rede Neural RBF e CNN 1D / Posição Genômica)", expanded=False):
+        caminho_img_k46 = os.path.join(DIR_GRAFICOS, "comparativo_regressao_logistica_k4_k6.png")
+        caminho_img_rbf = os.path.join(DIR_GRAFICOS, "comparativo_rbf_vs_pmc_rl.png")
+        caminho_img_cnn = os.path.join(DIR_GRAFICOS, "comparativo_cnn1d_posicao_genomica.png")
+        caminho_img_stress = os.path.join(DIR_GRAFICOS, "curva_degradacao_ruido_extremo.png")
+
+        if os.path.exists(caminho_img_k46):
+            st.markdown("#### 1. Ablação da Ordem do K-mer ($K=4, 5, 6$) na Regressão Logística vs PMC V3.0")
+            st.image(caminho_img_k46, caption="Impacto da Ordem do K-mer (256, 1.024 e 4.096 features) na Regressão Logística e no PMC Enxuto")
+        if os.path.exists(caminho_img_rbf):
+            st.markdown("#### 2. Rede Neural RBF (Moody-Darken) & Kernel RBF vs PMC V3.0")
+            st.image(caminho_img_rbf, caption="Comparativo entre Localidade Euclidiana (RBF) e Projeção Direcional (PMC V3.0)")
+        if os.path.exists(caminho_img_cnn):
+            st.markdown("#### 3. CNN 1D (Posicional vs Global) e Influência da Posição Genômica ($5' \\to 3'$)")
+            st.image(caminho_img_cnn, caption="Varredura posicional de amplicons de 500 pb ao longo das 10 regiões funcionais do DENV")
+        if os.path.exists(caminho_img_stress):
+            st.markdown("#### 4. Teste de Estresse de Ruído NGS (0% a 15%)")
+            st.image(caminho_img_stress, caption="Curva de degradação sob ruído estocástico crescente (0%, 4%, 8%, 10% e 15%)")
 
     st.divider()
 

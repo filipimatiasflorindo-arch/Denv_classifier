@@ -2,12 +2,19 @@
 # .gitignore - Classificador de Sorotipos do Vírus da Dengue (PMC)
 # ==============================================================================
 
-# Byte-compiled / otimizados / cache Python
+# Byte-compiled / otimizados / cache Python e Testes
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Cache local do Streamlit
+.streamlit/
 
 # Ambientes Virtuais (Virtual Environments)
 .venv/

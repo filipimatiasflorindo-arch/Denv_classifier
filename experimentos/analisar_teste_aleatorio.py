@@ -3,7 +3,6 @@ import re
 import sys
 import numpy as np
 import pandas as pd
-from collections import Counter
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -99,7 +98,7 @@ def main():
         if comp < K_MER_SIZE:
             rows.append({
                 'ID': r_id, 'Descricao': desc, 'Tamanho': comp, 'Label_Real': label_real,
-                'Is_Patent': is_patent, 'Pred_PMC': 'N/A (< 5pb)', 'Confianca': 0.0,
+                'Is_Patent': is_patent, 'Pred_PMC': f'N/A (< {K_MER_SIZE}pb)', 'Confianca': 0.0,
                 **{f'P({c})': 0.0 for c in classes}
             })
             continue

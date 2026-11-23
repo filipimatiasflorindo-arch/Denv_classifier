@@ -1,18 +1,14 @@
 import os
 import sys
-import itertools
 import time
 import numpy as np
 import pandas as pd
-from collections import Counter
-from typing import Optional, List, Tuple, Dict, Any
 
-from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score
 
 EXP_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(EXP_DIR)
@@ -20,206 +16,22 @@ for _p in (ROOT_DIR, EXP_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from PMC import carregar_fasta, fatiar_genoma, ARQUIVOS_SOROTIPOS, DIR_DADOS_TESTES, DIR_RESULTADOS
+from PMC import (
+    ARQUIVOS_SOROTIPOS,
+    DIR_DADOS_TESTES,
+    DIR_RESULTADOS,
+    LeanMLPDropout,
+    aplicar_ruido_estocastico,
+    carregar_fasta,
+    deduplicar_genomas_estrito,
+    fatiar_genoma,
+)
 from testar_arquiteturas_k6 import build_kmer_tools, extract_vec
 from analisar_teste_aleatorio import parse_header_organism
 
-# ==============================================================================
-# 1. FUNÇÃO DE RUÍDO ESTOCÁSTICO (SIMULAÇÃO DE READS BRUTAS NGS / INDELS / MUTAÇÕES)
-# ==============================================================================
-
-def aplicar_ruido_estocastico(
-    seq: str,
-    taxa_erro: float = 0.04,  # Média de 4% (faixa de 3% a 5%)
-    prop_substituicao: float = 0.70,
-    prop_insercao: float = 0.15,
-    prop_delecao: float = 0.15,
-    random_state: Optional[int] = None,
-) -> str:
-    """
-    Simula ruído estocástico de sequenciamento NGS (leituras brutas antes do basecalling):
-    - 70% de substituições de base (mutações pontuais)
-    - 15% de inserções aleatórias (indels)
-    - 15% de deleções (indels)
-    """
-    if not seq:
-        return ""
-
-    rng = np.random.default_rng(random_state)
-    bases = ["A", "C", "G", "T"]
-    nova_seq = []
-
-    for base in seq.upper().replace("U", "T"):
-        if rng.random() > taxa_erro:
-            nova_seq.append(base)
-        else:
-            tipo_erro = rng.random()
-            if tipo_erro < prop_substituicao:
-                # Substituição aleatória por base diferente
-                opcoes = [b for b in bases if b != base]
-                nova_seq.append(rng.choice(opcoes))
-            elif tipo_erro < prop_substituicao + prop_insercao:
-                # Inserção
-                nova_seq.append(base)
-                nova_seq.append(rng.choice(bases))
-            else:
-                # Deleção: ignora a base atual
-                pass
-
-    return "".join(nova_seq)
-
 
 # ==============================================================================
-# 2. IMPLEMENTAÇÃO DO PMC ENXUTO COM DROPOUT E L2 EM NUMPY PURO (SEM PYTORCH)
-# ==============================================================================
-
-class LeanMLPDropout(BaseEstimator, ClassifierMixin):
-    """
-    Perceptron Multicamadas (PMC) implementado em NumPy puro:
-    - Suporta Dropout estocástico com máscara invertida nas camadas ocultas.
-    - Regularização L2 com penalidade alpha.
-    - Otimizador Adam com mini-batches para convergência rápida e estável.
-    - Compatível 100% com a API scikit-learn (Pipeline, fit, predict, predict_proba).
-    """
-    def __init__(
-        self,
-        hidden_layers: Tuple[int, ...] = (64, 16),
-        dropout_rate: float = 0.3,
-        alpha: float = 0.01,
-        learning_rate: float = 0.001,
-        max_iter: int = 25,
-        batch_size: int = 128,
-        random_state: int = 42,
-    ):
-        self.hidden_layers = hidden_layers
-        self.dropout_rate = dropout_rate
-        self.alpha = alpha
-        self.learning_rate = learning_rate
-        self.max_iter = max_iter
-        self.batch_size = batch_size
-        self.random_state = random_state
-
-    def fit(self, X: np.ndarray, y: np.ndarray):
-        rng = np.random.default_rng(self.random_state)
-        self.classes_, y_idx = np.unique(y, return_inverse=True)
-        num_classes = len(self.classes_)
-        num_samples, input_dim = X.shape
-
-        layer_dims = [input_dim] + list(self.hidden_layers) + [num_classes]
-        self.weights_ = []
-        self.biases_ = []
-
-        # Inicialização He / Kaiming para ReLU
-        for i in range(len(layer_dims) - 1):
-            fan_in = layer_dims[i]
-            fan_out = layer_dims[i + 1]
-            limit = np.sqrt(2.0 / fan_in)
-            w = rng.normal(0, limit, size=(fan_in, fan_out)).astype(np.float32)
-            b = np.zeros(fan_out, dtype=np.float32)
-            self.weights_.append(w)
-            self.biases_.append(b)
-
-        # Momentos do Adam
-        m_w = [np.zeros_like(w) for w in self.weights_]
-        v_w = [np.zeros_like(w) for w in self.weights_]
-        m_b = [np.zeros_like(b) for b in self.biases_]
-        v_b = [np.zeros_like(b) for b in self.biases_]
-        beta1, beta2, eps = 0.9, 0.999, 1e-8
-        t = 0
-
-        num_batches = int(np.ceil(num_samples / self.batch_size))
-        keep_prob = 1.0 - self.dropout_rate
-
-        for epoch in range(self.max_iter):
-            indices = rng.permutation(num_samples)
-            X_shuffled = X[indices]
-            y_shuffled = y_idx[indices]
-
-            for b in range(num_batches):
-                t += 1
-                start = b * self.batch_size
-                end = min(start + self.batch_size, num_samples)
-                xb = X_shuffled[start:end]
-                yb = y_shuffled[start:end]
-                m = len(yb)
-
-                # Forward pass com Inverted Dropout
-                activations = [xb]
-                zs = []
-                masks = []
-
-                for l in range(len(self.weights_) - 1):
-                    z = activations[-1] @ self.weights_[l] + self.biases_[l]
-                    zs.append(z)
-                    a = np.maximum(0, z)  # ReLU
-                    if self.dropout_rate > 0:
-                        mask = (rng.random(a.shape) < keep_prob).astype(np.float32) / keep_prob
-                        a *= mask
-                        masks.append(mask)
-                    else:
-                        masks.append(None)
-                    activations.append(a)
-
-                # Camada de saída (Softmax)
-                z_out = activations[-1] @ self.weights_[-1] + self.biases_[-1]
-                zs.append(z_out)
-                exp_z = np.exp(z_out - np.max(z_out, axis=1, keepdims=True))
-                probs = exp_z / np.sum(exp_z, axis=1, keepdims=True)
-                activations.append(probs)
-
-                # Backward pass
-                dlogits = probs.copy()
-                dlogits[np.arange(m), yb] -= 1.0
-                dlogits /= m
-
-                grad_w = [None] * len(self.weights_)
-                grad_b = [None] * len(self.biases_)
-
-                grad_w[-1] = activations[-2].T @ dlogits + (self.alpha * self.weights_[-1])
-                grad_b[-1] = np.sum(dlogits, axis=0)
-
-                delta = dlogits
-                for l in range(len(self.weights_) - 2, -1, -1):
-                    delta = delta @ self.weights_[l + 1].T
-                    if masks[l] is not None:
-                        delta *= masks[l]
-                    delta = delta * (zs[l] > 0)  # Derivada da ReLU
-
-                    grad_w[l] = activations[l].T @ delta + (self.alpha * self.weights_[l])
-                    grad_b[l] = np.sum(delta, axis=0)
-
-                # Atualização Adam
-                for l in range(len(self.weights_)):
-                    m_w[l] = beta1 * m_w[l] + (1 - beta1) * grad_w[l]
-                    v_w[l] = beta2 * v_w[l] + (1 - beta2) * (grad_w[l] ** 2)
-                    m_hat_w = m_w[l] / (1 - beta1 ** t)
-                    v_hat_w = v_w[l] / (1 - beta2 ** t)
-                    self.weights_[l] -= self.learning_rate * m_hat_w / (np.sqrt(v_hat_w) + eps)
-
-                    m_b[l] = beta1 * m_b[l] + (1 - beta1) * grad_b[l]
-                    v_b[l] = beta2 * v_b[l] + (1 - beta2) * (grad_b[l] ** 2)
-                    m_hat_b = m_b[l] / (1 - beta1 ** t)
-                    v_hat_b = v_b[l] / (1 - beta2 ** t)
-                    self.biases_[l] -= self.learning_rate * m_hat_b / (np.sqrt(v_hat_b) + eps)
-
-        return self
-
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        a = X
-        for l in range(len(self.weights_) - 1):
-            z = a @ self.weights_[l] + self.biases_[l]
-            a = np.maximum(0, z)
-        z_out = a @ self.weights_[-1] + self.biases_[-1]
-        exp_z = np.exp(z_out - np.max(z_out, axis=1, keepdims=True))
-        return exp_z / np.sum(exp_z, axis=1, keepdims=True)
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        probs = self.predict_proba(X)
-        return self.classes_[np.argmax(probs, axis=1)]
-
-
-# ==============================================================================
-# 3. BENCHMARK COMPLETO: PMC ENXUTO vs REGRESSÃO LOGÍSTICA (LIMPO E COM RUÍDO)
+# BENCHMARK COMPLETO: PMC ENXUTO vs REGRESSÃO LOGÍSTICA (LIMPO E COM RUÍDO)
 # ==============================================================================
 
 def main():
@@ -233,8 +45,7 @@ def main():
         registros, _ = carregar_fasta(arq, sorotipo)
         todos_genomas.extend(registros)
 
-    vistos = set()
-    unicos = [g for g in todos_genomas if not (g['hash'] in vistos or vistos.add(g['hash']))]
+    unicos, _, _ = deduplicar_genomas_estrito(todos_genomas)
 
     # Split estrito a nível de genoma (80/20)
     from sklearn.model_selection import train_test_split

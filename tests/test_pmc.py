@@ -24,6 +24,7 @@ from PMC import (
     fatiar_genoma,
     mapear_regioes_genomicas,
     aplicar_ruido_estocastico,
+    deduplicar_genomas_estrito,
     LeanMLPDropout,
     carregar_pipeline,
     predizer_arquivo_fasta,
@@ -97,14 +98,29 @@ class TestPMCFragmentos(unittest.TestCase):
         self.assertIn("NS5", reg_ns5)
 
     def test_extrair_frequencias_kmers_soma_unitaria(self):
-        """Garante que a extração de K-mers gere vetor de 4.096 dimensões somando exatamente 1.0."""
+        """Garante que a extração de K-mers gere vetor de 4^K dimensões (K=4, 5, 6) somando 1.0."""
         fragmento = "ACGTGCAATGCA" * 200  # 2.400 pb
-        vetor = extrair_frequencias_kmers(fragmento, k=K_MER_SIZE)
+        for k_teste, dim_esperada in [(4, 256), (5, 1024), (6, 4096)]:
+            vetor = extrair_frequencias_kmers(fragmento, k=k_teste)
+            self.assertEqual(len(vetor), dim_esperada)
+            self.assertAlmostEqual(float(np.sum(vetor)), 1.0, places=5)
+            self.assertFalse(np.any(np.isnan(vetor)))
+            self.assertFalse(np.any(np.isinf(vetor)))
+        self.assertEqual(len(BASES), 4)
 
-        self.assertEqual(len(vetor), NUM_KMERS)
-        self.assertAlmostEqual(float(np.sum(vetor)), 1.0, places=5)
-        self.assertFalse(np.any(np.isnan(vetor)))
-        self.assertFalse(np.any(np.isinf(vetor)))
+    def test_deduplicar_genomas_estrito(self):
+        """Verifica se duplicatas intra-sorotipo e conflitos inter-sorotipo são filtrados."""
+        amostras = [
+            {"id": "G1", "sorotipo": "DENV-1", "hash": "hash_a"},
+            {"id": "G1_dup", "sorotipo": "DENV-1", "hash": "hash_a"},
+            {"id": "G2_conf1", "sorotipo": "DENV-2", "hash": "hash_conflito"},
+            {"id": "G2_conf2", "sorotipo": "DENV-3", "hash": "hash_conflito"},
+            {"id": "G3", "sorotipo": "DENV-4", "hash": "hash_b"},
+        ]
+        unicos, dup_mesmo, dup_conflito = deduplicar_genomas_estrito(amostras)
+        self.assertEqual(len(unicos), 2)
+        self.assertEqual(dup_mesmo, 1)
+        self.assertEqual(dup_conflito, 1)
 
     def test_invariancia_rna_dna(self):
         """Garante que Uracila ('U') e Timina ('T') gerem perfis estritamente idênticos."""
@@ -164,6 +180,18 @@ class TestPMCIntegracao(unittest.TestCase):
 
         self.assertIn(pred, ["DENV-1", "DENV-2", "DENV-3", "DENV-4"])
         self.assertAlmostEqual(float(np.sum(probas)), 1.0, places=4)
+
+    def test_predizer_arquivo_fasta_cli(self):
+        """Verifica se predizer_arquivo_fasta resolve arquivos em dados/testes/ e classifica."""
+        try:
+            pipe = carregar_pipeline()
+        except FileNotFoundError:
+            self.skipTest("Pipeline ainda não treinado/salvo.")
+
+        df_res = predizer_arquivo_fasta("testando.fasta", pipeline=pipe, salvar_csv=False)
+        self.assertFalse(df_res.empty)
+        self.assertIn("Sorotipo Predito", df_res.columns)
+        self.assertEqual(df_res.iloc[0]["Sorotipo Predito"], "DENV-1")
 
 
 if __name__ == "__main__":

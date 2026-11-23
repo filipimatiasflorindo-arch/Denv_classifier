@@ -3,7 +3,6 @@ import sys
 import time
 import numpy as np
 import pandas as pd
-from collections import Counter
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -16,17 +15,14 @@ for _p in (ROOT_DIR, EXP_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import PMC
 from PMC import (
     DIR_DADOS_TESTES,
     DIR_GRAFICOS,
     DIR_RESULTADOS,
-    K_MER_SIZE,
-    NUM_KMERS,
-    LeanMLPDropout,
     aplicar_ruido_estocastico,
     carregar_pipeline,
     carregar_fasta,
+    deduplicar_genomas_estrito,
     fatiar_genoma,
     ARQUIVOS_SOROTIPOS,
 )
@@ -47,8 +43,7 @@ def main():
         registros, _ = carregar_fasta(arq, sorotipo)
         todos_genomas.extend(registros)
 
-    vistos = set()
-    unicos = [g for g in todos_genomas if not (g['hash'] in vistos or vistos.add(g['hash']))]
+    unicos, _, _ = deduplicar_genomas_estrito(todos_genomas)
 
     from sklearn.model_selection import train_test_split
     y_gen = [g['sorotipo'] for g in unicos]

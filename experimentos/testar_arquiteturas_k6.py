@@ -8,7 +8,7 @@ from collections import Counter
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score
 
 EXP_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(EXP_DIR)
@@ -16,7 +16,7 @@ for _p in (ROOT_DIR, EXP_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from PMC import carregar_fasta, fatiar_genoma, ARQUIVOS_SOROTIPOS, DIR_DADOS_TESTES, DIR_RESULTADOS
+from PMC import carregar_fasta, deduplicar_genomas_estrito, fatiar_genoma, ARQUIVOS_SOROTIPOS, DIR_DADOS_TESTES, DIR_RESULTADOS
 from analisar_teste_aleatorio import parse_header_organism
 
 BASES = ['A', 'C', 'G', 'T']
@@ -54,13 +54,8 @@ def main():
         registros, _ = carregar_fasta(arq, sorotipo)
         todos_genomas.extend(registros)
 
-    # Deduplicar
-    vistos = set()
-    unicos = []
-    for g in todos_genomas:
-        if g['hash'] not in vistos:
-            vistos.add(g['hash'])
-            unicos.append(g)
+    # Deduplicar estritamente (removendo duplicatas e conflitos inter-sorotipo)
+    unicos, _, _ = deduplicar_genomas_estrito(todos_genomas)
 
     # Split a nível de genoma (80/20)
     from sklearn.model_selection import train_test_split

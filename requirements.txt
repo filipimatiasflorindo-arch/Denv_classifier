@@ -1,20 +1,23 @@
 # ==============================================================================
-# Dependências do Projeto: Classificador PMC de Sorotipos da Dengue
+# Dependências do Projeto: Classificador PMC de Sorotipos da Dengue (Versão 3.0)
+# Inclui suporte para PMC Enxuto (LeanMLPDropout), Rede Neural RBF, CNN 1D,
+# Regressão Logística, Painel Interativo Streamlit e Geração de Gráficos (300 DPI)
 # ==============================================================================
 
-# Computação Científica e Estruturas de Dados
-numpy>=1.25.0
-pandas>=2.0.0
+# Computação Científica, Álgebra Linear (NumPy Puro) e Estruturas Tabulares
+numpy>=1.26.0
+pandas>=2.1.0
 
-# Aprendizado de Máquina e Perceptron Multicamadas (PMC)
+# Aprendizado de Máquina, Pré-processamento, K-Means (RBF) e Serialização
 scikit-learn>=1.4.0
 joblib>=1.3.0
 
-# Visualização de Dados e Gráficos Acadêmicos
+# Visualização Científica e Matrizes de Confusão
 matplotlib>=3.8.0
 seaborn>=0.13.0
 
-# Interface Web Interativa (Dashboard)
+# Interface Web Interativa (Dashboard Streamlit)
 streamlit>=1.35.0
 altair>=5.0.0
+
 

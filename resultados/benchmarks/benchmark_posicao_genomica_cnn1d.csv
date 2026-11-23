@@ -1,0 +1,11 @@
+Regiao Genômica,Coordenadas Amplicon (pb),Centro (pb),Função Biológica,PMC V3.0 (Limpo %),CNN 1D Global (Limpo %),CNN 1D Posicional (Limpo %),Reg. Logística (Limpo %),PMC V3.0 (Ruído 4% %),CNN 1D Global (Ruído 4% %),CNN 1D Posicional (Ruído 4% %),Reg. Logística (Ruído 4% %)
+5'UTR / C / prM,217-717,467,Estrutural (Capsídeo/Membrana),99.84,99.36,99.84,99.04,99.36,97.59,98.55,95.18
+E (Domínio I/II),1058-1558,1308,Estrutural (Envelope N-term),100.0,100.0,100.0,99.84,99.84,99.84,99.2,99.84
+E (Domínio III),1800-2300,2050,Estrutural (Envelope Receptor),99.84,99.84,99.84,99.84,100.0,99.2,98.23,99.52
+NS1,2698-3198,2948,Não-Estrutural (Glicoproteína),99.68,99.68,99.52,99.36,99.36,99.2,97.59,98.71
+NS2A / NS2B,3748-4248,3998,Não-Estrutural (Cofator Protease),100.0,100.0,99.68,99.84,99.84,100.0,98.55,99.52
+NS3 (Protease),4710-5210,4960,Não-Estrutural (Serina Protease),99.84,100.0,99.04,99.36,100.0,99.68,94.05,98.71
+NS3 (Helicase),5637-6137,5887,Não-Estrutural (RNA Helicase),99.84,99.84,100.0,99.68,99.68,99.68,94.86,98.87
+NS4A / 2K / NS4B,6756-7256,7006,Não-Estrutural (Complexo Replicação),99.52,99.84,99.36,99.52,99.68,98.87,97.91,99.2
+NS5 (MTase),8019-8519,8269,Não-Estrutural (Metiltransferase),99.84,99.84,99.84,99.68,99.84,99.84,99.52,99.68
+NS5 (RdRp) / 3'UTR,9400-9900,9650,Não-Estrutural (RNA Polimerase - Mais Conservada),99.36,94.21,100.0,99.36,96.78,80.87,98.55,95.18

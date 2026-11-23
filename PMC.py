@@ -33,7 +33,8 @@ HISTÓRICO EVOLUTIVO E RESULTADOS COMPARATIVOS DE TODAS AS VERSÕES DO PROJETO:
    - Escopo: Entrada de 4.096 hexâmeros ($K=6$), camada oculta única enxuta (32,)
      em NumPy puro (sem dependência de PyTorch), Inverted Dropout ($p=0.3$),
      regularização L2 robusta ($\alpha=0.01$) e otimizador Adam vetorial.
-   - Redução de Parâmetros: Apenas 131.200 pesos (redução de 94% em relação a V2.5).
+   - Redução de Parâmetros: Apenas 131.200 pesos sinápticos / 131.236 parâmetros
+     totais com vieses (redução de 94% em relação a V2.5).
    - Robustez Biológica: Testado sob ruído estocástico de 3% a 5% (indels e
      substituições simulando leituras brutas de NGS sem polimento).
    - Resultados Empíricos Comparativos:
@@ -65,9 +66,8 @@ from sklearn.metrics import (
     balanced_accuracy_score,
     classification_report,
     confusion_matrix,
-    f1_score,
 )
-from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelBinarizer, StandardScaler
 
@@ -166,6 +166,20 @@ def validar_sequencia(
     return True, None
 
 
+# Cache de índices de K-mers para suportar extração dinâmica com qualquer ordem k (ex: k=4, 5, 6)
+_CACHE_KMERS: Dict[int, Tuple[Dict[str, int], int]] = {
+    K_MER_SIZE: (KMERS_INDEX, NUM_KMERS),
+}
+
+
+def _obter_indice_kmers(k: int) -> Tuple[Dict[str, int], int]:
+    """Retorna (dicionário de índices, total de k-mers 4^k) para a ordem k solicitada."""
+    if k not in _CACHE_KMERS:
+        kmers_k = ["".join(p) for p in itertools.product(BASES, repeat=k)]
+        _CACHE_KMERS[k] = ({km: idx for idx, km in enumerate(kmers_k)}, len(kmers_k))
+    return _CACHE_KMERS[k]
+
+
 def extrair_frequencias_kmers(seq: str, k: int = K_MER_SIZE) -> np.ndarray:
     """
     Calcula o vetor de frequências relativas normalizadas dos 4^k K-mers canônicos
@@ -174,18 +188,19 @@ def extrair_frequencias_kmers(seq: str, k: int = K_MER_SIZE) -> np.ndarray:
     Garante que a soma do vetor de características seja estritamente 1.0 (invariante a escala),
     ignorando janelas que contenham bases ambíguas/degeneradas (N, R, Y, etc.).
     """
+    k_index, num_kmers = _obter_indice_kmers(k)
     seq_limpa = seq.upper().replace("U", "T")
     total_janelas = len(seq_limpa) - k + 1
     if total_janelas <= 0:
-        return np.zeros(NUM_KMERS, dtype=np.float32)
+        return np.zeros(num_kmers, dtype=np.float32)
 
     contagens = Counter(seq_limpa[i : i + k] for i in range(total_janelas))
 
-    vetor = np.zeros(NUM_KMERS, dtype=np.float32)
+    vetor = np.zeros(num_kmers, dtype=np.float32)
     total_validos = 0
 
     for kmer, count in contagens.items():
-        idx = KMERS_INDEX.get(kmer)
+        idx = k_index.get(kmer)
         if idx is not None:
             vetor[idx] = count
             total_validos += count
@@ -348,16 +363,54 @@ def carregar_fasta(
                 continue
             if linha.startswith(">"):
                 if seq_atual:
-                    processar_sequencia(header_atual, header_completo, seq_atual)
+                    processar_sequencia(
+                        header_atual or f"Seq_{estatisticas['total_lidas'] + 1:04d}",
+                        header_completo or f"Seq_{estatisticas['total_lidas'] + 1:04d}",
+                        seq_atual,
+                    )
                     seq_atual = []
-                header_completo = linha[1:].strip()
-                header_atual = header_completo.split()[0]
+                header_completo = linha[1:].strip() or f"Seq_{estatisticas['total_lidas'] + 1:04d}"
+                partes_header = header_completo.split()
+                header_atual = partes_header[0] if partes_header else header_completo
             else:
                 seq_atual.append(linha)
         if seq_atual:
-            processar_sequencia(header_atual, header_completo, seq_atual)
+            processar_sequencia(
+                header_atual or f"Seq_{estatisticas['total_lidas'] + 1:04d}",
+                header_completo or f"Seq_{estatisticas['total_lidas'] + 1:04d}",
+                seq_atual,
+            )
 
     return registos, estatisticas
+
+
+def deduplicar_genomas_estrito(
+    todos_genomas: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], int, int]:
+    """
+    Deduplica genomas por hash SHA-256 com verificação estrita de conflito taxonômico:
+    - Remove cópias idênticas dentro do mesmo sorotipo.
+    - Exclui sequências idênticas caso apareçam com rótulos de sorotipos conflitantes.
+    Retorna (genomas_unicos, duplicatas_mesmo_sorotipo, duplicatas_conflito).
+    """
+    hashes_map: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for g in todos_genomas:
+        hashes_map[g["hash"]].append(g)
+
+    genomas_unicos: List[Dict[str, Any]] = []
+    duplicatas_mesmo_sorotipo = 0
+    duplicatas_conflito = 0
+
+    for _, lista in hashes_map.items():
+        sorotipos_distintos = set(item["sorotipo"] for item in lista)
+        if len(sorotipos_distintos) > 1:
+            duplicatas_conflito += 1
+            continue
+        if len(lista) > 1:
+            duplicatas_mesmo_sorotipo += len(lista) - 1
+        genomas_unicos.append(lista[0])
+
+    return genomas_unicos, duplicatas_mesmo_sorotipo, duplicatas_conflito
 
 
 def construir_e_particionar_dataset(
@@ -392,22 +445,7 @@ def construir_e_particionar_dataset(
         )
 
     # Deduplicação rigorosa por hash SHA-256
-    hashes_map: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    for g in todos_genomas:
-        hashes_map[g["hash"]].append(g)
-
-    genomas_unicos: List[Dict[str, Any]] = []
-    duplicatas_mesmo_sorotipo = 0
-    duplicatas_conflito = 0
-
-    for h_val, lista in hashes_map.items():
-        sorotipos_distintos = set(item["sorotipo"] for item in lista)
-        if len(sorotipos_distintos) > 1:
-            duplicatas_conflito += 1
-            continue
-        if len(lista) > 1:
-            duplicatas_mesmo_sorotipo += len(lista) - 1
-        genomas_unicos.append(lista[0])
+    genomas_unicos, duplicatas_mesmo_sorotipo, duplicatas_conflito = deduplicar_genomas_estrito(todos_genomas)
 
     print(f"\nAuditoria de Redundância Genômica:")
     print(f" - Genomas válidos pós-filtros de qualidade: {len(todos_genomas):,}")
@@ -617,7 +655,6 @@ class LeanMLPDropout(BaseEstimator, ClassifierMixin):
 
 
 def criar_pipeline_pmc(
-    input_dim: int = NUM_KMERS,
     hidden_layers: Tuple[int, ...] = (32,),
     dropout_rate: float = 0.3,
     alpha: float = 0.01,
@@ -815,13 +852,17 @@ def predizer_arquivo_fasta(
                 continue
             if linha.startswith(">"):
                 if seq_atual:
-                    sequencias_lidas.append((header_atual, "".join(seq_atual)))
+                    id_seq = header_atual or f"Sequencia_{len(sequencias_lidas) + 1:04d}"
+                    sequencias_lidas.append((id_seq, "".join(seq_atual)))
                     seq_atual = []
-                header_atual = linha[1:].strip().split()[0]
+                texto_h = linha[1:].strip()
+                partes_h = texto_h.split()
+                header_atual = partes_h[0] if partes_h else f"Sequencia_{len(sequencias_lidas) + 1:04d}"
             else:
                 seq_atual.append(linha)
         if seq_atual:
-            sequencias_lidas.append((header_atual, "".join(seq_atual)))
+            id_seq = header_atual or f"Sequencia_{len(sequencias_lidas) + 1:04d}"
+            sequencias_lidas.append((id_seq, "".join(seq_atual)))
 
     if not sequencias_lidas:
         print(f"Nenhuma sequência encontrada no arquivo '{caminho_fasta}'.")
@@ -900,7 +941,6 @@ def main() -> None:
 
     # 2. Criação do Pipeline do PMC Enxuto (32,) com Dropout (p=0.3) e L2 (alpha=0.01)
     pipeline = criar_pipeline_pmc(
-        input_dim=NUM_KMERS,
         hidden_layers=(32,),
         dropout_rate=0.3,
         alpha=0.01,
