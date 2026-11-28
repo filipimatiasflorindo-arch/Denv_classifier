@@ -17,7 +17,7 @@ for _p in (ROOT_DIR, EXP_DIR):
         sys.path.insert(0, _p)
 
 from PMC import carregar_fasta, deduplicar_genomas_estrito, fatiar_genoma, ARQUIVOS_SOROTIPOS, DIR_DADOS_TESTES, DIR_RESULTADOS
-from analisar_teste_aleatorio import parse_header_organism
+from avaliar_validacao_externa import parse_header_organism
 
 BASES = ['A', 'C', 'G', 'T']
 

@@ -469,26 +469,26 @@ with tab_modelo:
             "Alvo": "Fragmentos, Amplicons e Reads NGS",
             "Features": "4.096 Hexâmeros (K=6)",
             "Arquitetura": "PMC Enxuto (32,) + Dropout (p=0.3) + L2",
-            "Acurácia Global": "97,56% (Limpo) | 97,40% (Ruído NGS)",
-            "Diagnóstico Metodológico": "131.200 pesos sinápticos (131.236 parâmetros com vieses, -94%). Supera a Regressão Logística sob ruído NGS."
+            "Acurácia Global": "97,40% (Limpo) | 97,40% (Ruído 4% em <1kb)",
+            "Diagnóstico Metodológico": "131.200 pesos sinápticos (131.236 parâmetros com vieses, -94%). Supera a Regressão Logística em amplicons e sob ruído NGS."
         },
     ])
     st.dataframe(df_versoes, width="stretch", hide_index=True)
 
     st.markdown("### 🔬 Duelo Experimental: PMC Enxuto vs Regressão Logística (Cenários Limpo e Ruidoso)")
     st.markdown("""
-    Sob simulação de **leitura bruta de sequenciamento NGS com 4% de erro estocástico (substituições e indels)**,
-    o modelo linear aditivo sofre degradação acentuada (-5,83%), enquanto o **PMC com Dropout e regularização L2
+    Sob simulação de **leitura bruta de sequenciamento NGS com 4% de erro estocástico (substituições e indels aplicados aos fragmentos < 1.000 pb)**,
+    o modelo linear aditivo sofre degradação acentuada em amplicons e reads curtas, enquanto o **PMC com Dropout e regularização L2
     permanece resiliente e supera a Regressão Logística em amplicons (90,98% vs 85,66%)**:
     """)
 
     df_comp_ruido = pd.DataFrame([
-        {"Modelo": "PMC (32,) + Dropout (p=0.3) + L2", "Limpo (Global)": "97,56%", "Limpo (300-1000pb)": "91,80%", "Ruído 4% (Global)": "97,40%", "Ruído 4% (300-1000pb)": "90,98%", "Queda em Reads (<300pb)": "-0,97% (Resiliente)"},
-        {"Modelo": "PMC (64, 16) + Dropout (p=0.3) + L2", "Limpo (Global)": "97,45%", "Limpo (300-1000pb)": "91,39%", "Ruído 4% (Global)": "97,13%", "Ruído 4% (300-1000pb)": "90,57%", "Queda em Reads (<300pb)": "-3,88%"},
-        {"Modelo": "Regressão Logística (L2)", "Limpo (Global)": "97,51%", "Limpo (300-1000pb)": "89,34%", "Ruído 4% (Global)": "96,70%", "Ruído 4% (300-1000pb)": "85,66%", "Queda em Reads (<300pb)": "-5,83% (Sensível)"},
-        {"Modelo": "PMC Grande (512, 128) [V2.5]", "Limpo (Global)": "97,51%", "Limpo (300-1000pb)": "91,39%", "Ruído 4% (Global)": "97,02%", "Ruído 4% (300-1000pb)": "89,34%", "Queda em Reads (<300pb)": "-3,88%"},
+        {"Modelo": "PMC V3.0 (32,) + Dropout (p=0.3) + L2", "Limpo (Global)": "97,40%", "Limpo (300-1000pb)": "91,39%", "Ruído 4% (Global*)": "97,40%", "Ruído 4% (300-1000pb)": "90,98%", "Reads (<300pb) Limpo -> Ruído 4%": "81,55% -> 82,52% (Resiliente)"},
+        {"Modelo": "Regressão Logística (L2, C=1.0)", "Limpo (Global)": "97,51%", "Limpo (300-1000pb)": "89,34%", "Ruído 4% (Global*)": "96,70%", "Ruído 4% (300-1000pb)": "85,66%", "Reads (<300pb) Limpo -> Ruído 4%": "87,38% -> 81,55% (-5,83%)"},
+        {"Modelo": "PMC Grande (512, 128) [V2.5]", "Limpo (Global)": "97,51%", "Limpo (300-1000pb)": "91,39%", "Ruído 4% (Global*)": "97,02%", "Ruído 4% (300-1000pb)": "89,34%", "Reads (<300pb) Limpo -> Ruído 4%": "82,52% -> 78,64% (-3,88%)"},
     ])
     st.dataframe(df_comp_ruido, width="stretch", hide_index=True)
+    st.caption("*Nota metodológica: na métrica Global sob Ruído, o erro estocástico (4%) é aplicado apenas aos fragmentos curtos (< 1.000 pb); sequências >= 1.000 pb permanecem limpas.")
 
     with st.expander("📊 Novos Experimentos do Artigo (Ablação K=4..6, Rede Neural RBF e CNN 1D / Posição Genômica)", expanded=False):
         caminho_img_k46 = os.path.join(DIR_GRAFICOS, "comparativo_regressao_logistica_k4_k6.png")

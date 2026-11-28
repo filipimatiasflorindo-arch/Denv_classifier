@@ -46,6 +46,9 @@ Desktop.ini
 predicoes_*.csv
 resultados/predicoes/predicoes_*.csv
 
+# Rascunhos locais de documentos/artigos
+*_rascunho*
+
 # (Opcional) Descomente as linhas abaixo caso não deseje versionar 
 # os modelos treinados pesados ou arquivos de dados brutos muito volumosos:
 # *.joblib

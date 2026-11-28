@@ -20,6 +20,7 @@ from PMC import (
     KMERS_CANONICOS,
     NUM_KMERS,
     validar_sequencia,
+    carregar_fasta,
     extrair_frequencias_kmers,
     fatiar_genoma,
     mapear_regioes_genomicas,
@@ -122,6 +123,27 @@ class TestPMCFragmentos(unittest.TestCase):
         self.assertEqual(dup_mesmo, 1)
         self.assertEqual(dup_conflito, 1)
 
+    def test_carregar_fasta_contagem_motivos_rejeicao(self):
+        """Verifica se carregar_fasta separa corretamente rejeições por Comprimento vs Bases Ambíguas."""
+        import tempfile
+        conteudo = (
+            ">seq_curta\n" + ("ACGT" * 100) + "\n"
+            ">seq_muito_n\n" + ("ACGT" * 2450) + ("N" * 300) + "\n"
+            ">seq_valida\n" + ("ACGT" * 2600) + "\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False, encoding="utf-8") as tmp:
+            tmp.write(conteudo)
+            caminho_tmp = tmp.name
+        try:
+            regs, stats = carregar_fasta(caminho_tmp, rotulo_sorotipo="DENV-1")
+            self.assertEqual(stats["total_lidas"], 3)
+            self.assertEqual(stats["aceitas"], 1)
+            self.assertEqual(stats["motivos_rejeicao"]["Fora do Tamanho"], 1)
+            self.assertEqual(stats["motivos_rejeicao"]["Bases Ambíguas"], 1)
+            self.assertEqual(len(regs), 1)
+        finally:
+            os.remove(caminho_tmp)
+
     def test_invariancia_rna_dna(self):
         """Garante que Uracila ('U') e Timina ('T') gerem perfis estritamente idênticos."""
         frag_dna = "ACGTACTGACGT" * 200
@@ -188,7 +210,7 @@ class TestPMCIntegracao(unittest.TestCase):
         except FileNotFoundError:
             self.skipTest("Pipeline ainda não treinado/salvo.")
 
-        df_res = predizer_arquivo_fasta("testando.fasta", pipeline=pipe, salvar_csv=False)
+        df_res = predizer_arquivo_fasta("amostra_referencia_denv1.fasta", pipeline=pipe, salvar_csv=False)
         self.assertFalse(df_res.empty)
         self.assertIn("Sorotipo Predito", df_res.columns)
         self.assertEqual(df_res.iloc[0]["Sorotipo Predito"], "DENV-1")

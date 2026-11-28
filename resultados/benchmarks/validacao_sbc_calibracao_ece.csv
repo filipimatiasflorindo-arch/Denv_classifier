@@ -1,0 +1,7 @@
+Conjunto,N,Modelo,Acuracia (%),Acc Balanceada (%),Macro-F1 (%),Acc por Genoma N=622 (%),Brier Score,ECE,MCE
+Teste Cego Não-Sobreposto (2.000 pb),3110,"PMC Enxuto V3.0 (32,) + Dropout",99.9,99.72,99.82,99.84,0.00126,0.00162,0.79616
+Teste Cego Não-Sobreposto (2.000 pb),3110,"Regressão Logística (L2, C=1.0)",99.87,99.82,99.76,99.84,0.00247,0.00109,0.58711
+Teste Cego Não-Sobreposto (2.000 pb),3110,"PMC Grande (512, 128)",99.84,99.6,99.69,99.84,0.00189,0.00139,0.84866
+Validação Externa Inédita - Amplicons (300-1000 pb),201,"PMC Enxuto V3.0 (32,) + Dropout",91.04,90.96,88.61,,0.13197,0.0513,0.63814
+Validação Externa Inédita - Amplicons (300-1000 pb),201,"Regressão Logística (L2, C=1.0)",88.56,88.28,86.07,,0.18535,0.07841,0.6353
+Validação Externa Inédita - Amplicons (300-1000 pb),201,"PMC Grande (512, 128)",88.06,87.77,86.76,,0.21312,0.10752,0.83745

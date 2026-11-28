@@ -17,7 +17,7 @@ for _p in (ROOT_DIR, EXP_DIR):
         sys.path.insert(0, _p)
 
 from PMC import carregar_fasta, deduplicar_genomas_estrito, fatiar_genoma, ARQUIVOS_SOROTIPOS, DIR_DADOS_TESTES
-from analisar_teste_aleatorio import parse_header_organism
+from avaliar_validacao_externa import parse_header_organism
 
 BASES = ['A', 'C', 'G', 'T']
 
@@ -157,10 +157,10 @@ def run_experiment():
         acc_total = accuracy_score(y_aleat, preds_aleat) * 100
         print(f"-> Acurácia Global teste_aleatorio.fasta: {acc_total:.2f}%")
 
-        # Estratificação
-        bins = [0, 300, 1000, 5000, 15000]
+        # Estratificação (intervalos semiabertos [a, b) padronizados)
+        bins = [0, 300, 1000, 5000, np.inf]
         strata = ['< 300 pb', '300-1000 pb', '1000-5000 pb', '>= 5000 pb']
-        cats = pd.cut(lens_aleat, bins=bins, labels=strata)
+        cats = pd.cut(lens_aleat, bins=bins, labels=strata, right=False)
         for st in strata:
             mask = (cats == st)
             sub_acc = accuracy_score(y_aleat[mask], preds_aleat[mask]) * 100

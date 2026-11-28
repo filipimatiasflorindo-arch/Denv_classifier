@@ -39,7 +39,7 @@ from PMC import (
     deduplicar_genomas_estrito,
     fatiar_genoma,
 )
-from analisar_teste_aleatorio import parse_header_organism
+from avaliar_validacao_externa import parse_header_organism
 
 BASES = ["A", "C", "G", "T"]
 
@@ -146,7 +146,7 @@ def main():
         for i, (_, comp, s) in enumerate(aleatorio_validos)
     ]
     seqs_ruido_10 = [
-        aplicar_ruido_estocastico(s, taxa_erro=0.10, random_state=1042 + i) if comp < 1000 else s
+        aplicar_ruido_estocastico(s, taxa_erro=0.10, random_state=42 + i) if comp < 1000 else s
         for i, (_, comp, s) in enumerate(aleatorio_validos)
     ]
 

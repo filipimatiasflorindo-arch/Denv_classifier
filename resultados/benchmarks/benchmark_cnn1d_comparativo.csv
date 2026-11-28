@@ -1,5 +1,5 @@
 Modelo,Nome Curto,Tempo Treino (s),Teste Cego 2000pb (%),Limpo Global (%),Limpo Macro-F1 (%),Limpo <300pb (%),Limpo 300-1000pb (%),Ruido 4% 300-1000pb (%),Ruido 10% 300-1000pb (%)
-CNN 1D Posicional (Conv1D + Spatial Flatten 5'->3'),CNN 1D Posicional,69.02,99.89,97.51,96.73,88.35,90.98,89.34,80.74
-CNN 1D Global (Conv1D + Global Avg/Max Pool),CNN 1D Global,70.21,99.93,97.13,96.58,80.58,89.34,89.34,81.97
-"PMC Enxuto V3.0 (32,) + Dropout (p=0.3)","PMC V3.0 (32,)",6.39,99.89,97.4,95.91,81.55,91.39,90.98,90.16
-"Regressão Logística (L2, C=1.0)",Reg. Logística,1.12,99.84,97.51,96.21,87.38,89.34,85.66,80.74
+CNN 1D Posicional (Conv1D + Spatial Flatten 5'->3'),CNN 1D Posicional,67.38,99.89,97.51,96.73,88.35,90.98,89.34,84.84
+CNN 1D Global (Conv1D + Global Avg/Max Pool),CNN 1D Global,68.37,99.93,97.13,96.58,80.58,89.34,89.34,81.15
+"PMC Enxuto V3.0 (32,) + Dropout (p=0.3)","PMC V3.0 (32,)",6.42,99.89,97.4,95.91,81.55,91.39,90.98,86.89
+"Regressão Logística (L2, C=1.0)",Reg. Logística,1.18,99.84,97.51,96.21,87.38,89.34,85.66,77.87

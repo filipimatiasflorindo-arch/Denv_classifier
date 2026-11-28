@@ -138,15 +138,15 @@ def main():
     print("Matriz de Confusão:")
     print(cm_df)
 
-    # Estratificação por comprimento
-    bins = [0, 300, 1000, 5000, 15000]
+    # Estratificação por comprimento (intervalos semiabertos [a, b) padronizados com os demais scripts)
+    bins = [0, 300, 1000, 5000, np.inf]
     strata_labels = [
         '< 300 pb (Ultra-curtos / Reads parciais)',
         '300 - 1.000 pb (Amplicons / PCRs)',
         '1.000 - 5.000 pb (Genes completos / E, NS1)',
         '>= 5.000 pb (Genomas quase completos / completos)'
     ]
-    df_val['Faixa_Tamanho'] = pd.cut(df_val['Tamanho'], bins=bins, labels=strata_labels)
+    df_val['Faixa_Tamanho'] = pd.cut(df_val['Tamanho'], bins=bins, labels=strata_labels, right=False)
 
     print("\n" + "=" * 80)
     print("DESEMPENHO DO PMC ESTRATIFICADO POR COMPRIMENTO:")

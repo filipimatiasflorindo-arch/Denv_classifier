@@ -26,8 +26,8 @@ from PMC import (
     deduplicar_genomas_estrito,
     fatiar_genoma,
 )
-from testar_arquiteturas_k6 import build_kmer_tools, extract_vec
-from analisar_teste_aleatorio import parse_header_organism
+from experimento_arquiteturas_k6 import build_kmer_tools, extract_vec
+from avaliar_validacao_externa import parse_header_organism
 
 
 # ==============================================================================

@@ -37,12 +37,13 @@ HISTÓRICO EVOLUTIVO E RESULTADOS COMPARATIVOS DE TODAS AS VERSÕES DO PROJETO:
      totais com vieses (redução de 94% em relação a V2.5).
    - Robustez Biológica: Testado sob ruído estocástico de 3% a 5% (indels e
      substituições simulando leituras brutas de NGS sem polimento).
-   - Resultados Empíricos Comparativos:
-     * Dados Limpos: Acurácia Global de 97.56% (vs 97.51% da Regressão Logística);
-       Amplicons (300-1000 pb): 91.80% (vs 89.34% da Regressão Logística).
-     * Dados Ruidosos (4% erro NGS): Acurácia Global de 97.40% (vs 96.70% da RL);
-       Amplicons Ruidosos: 90.98% (vs 85.66% da Regressão Logística);
-       Queda de acurácia em reads curtas: apenas -0.97% (contra -5.83% da RL).
+   - Resultados Empíricos Comparativos (3.109 genomas curados / 1.846 seqs externas):
+     * Dados Limpos: Acurácia Global de 97.40% (vs 97.51% da Regressão Logística);
+       Amplicons (300-1000 pb): 91.39% (vs 89.34% da Regressão Logística);
+       Reads (<300 pb): 81.55% (97.55% global nas 1.595 seqs estritamente inéditas).
+     * Dados Ruidosos (4% erro NGS em fragmentos <1.000 pb): Acurácia Global de
+       97.40% (vs 96.70% da RL); Amplicons Ruidosos: 90.98% (vs 85.66% da RL);
+       Reads Ruidosas (<300 pb): 82.52% (vs 81.55% da RL).
 ================================================================================
 """
 
@@ -353,7 +354,7 @@ def carregar_fasta(
                 "comprimento": len(seq_str),
             })
         else:
-            motivo_chave = "Fora do Tamanho" if "Tamanho" in (motivo or "") else "Bases Ambíguas"
+            motivo_chave = "Fora do Tamanho" if "Comprimento" in (motivo or "") else "Bases Ambíguas"
             estatisticas["motivos_rejeicao"][motivo_chave] += 1
 
     with open(caminho_arquivo, "r", encoding="utf-8", errors="ignore") as f:
